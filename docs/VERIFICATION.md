@@ -30,3 +30,14 @@ Not yet verified: historical traffic, actual customer entrances/legal truck acce
 Added default geographic grouping and driving efficiency, both prioritizing deliveries served and fewer active trucks. All 12 unit tests pass, including a controlled proximity/travel tradeoff, shared-matrix comparison, legacy defaults, input preservation and capacity-limited fleet size. JavaScript syntax validation passes. Docker app rebuilt against the existing regional Valhalla service. Browser comparison and switching between plans verified.
 
 One road-routing sample run served all 40 stops with seven trucks in both modes and no warnings. Geographic grouping: 107.8 km, 316 driving minutes, 26 of 101 nearby assigned pairs split. Efficiency: 97.8 km, 291 driving minutes, 33 of 101 pairs split. Search is time-limited, so results can vary between runs. Nearby is within 800 m straight-line distance. These are fictional sample results, not measured operational savings.
+
+
+## Load summary and route duration (October 30, 2026)
+
+- Nineteen unit tests pass. New cases verify mixed-capacity fleet bounds, unavailable trucks, fleet-cap shortfalls, unassigned load, overloads without netting against another truck's empty space, eight-hour migration/validation, full elapsed time and earlier shift deadlines.
+- A controlled scenario carries only four pallets but needs two trucks under an eight-hour route cap: one truck would take 510 minutes; each of two takes 260 minutes. Both modes respect the limit. A one-truck cap leaves one delivery unassigned instead of allowing overtime.
+- Waiting, service and the return leg are all included: a manual 485-minute route warns under the eight-hour cap, and optimization leaves its infeasible stop unassigned.
+- JavaScript syntax and git whitespace checks pass. Docker app rebuilt against the existing local Valhalla service.
+- Browser verification: migrated saved scenario shows 80 pallets, 144 available spaces, 96 spaces under the eight-truck cap, and 80/84 loaded across seven used trucks (four empty spaces). The capacity floor is seven. Both comparison plans serve 40 deliveries without warnings, with a longest full route displayed as 2h 26m.
+- Editing the route cap to two hours flags six of seven manual routes and disables approval. Editing Truck 01's shift end to 09:00 applies the earlier one-hour deadline and warns. Setting the fleet cap to six shows an eight-pallet capacity shortfall without recalculating road routes. Restored the eight-hour limit, eight-truck cap and 17:00 shift end, then compared both modes.
+- Pallets remain the capacity unit. Box conversions, depot loading, driver breaks and historical/live traffic are not included.

@@ -41,6 +41,8 @@ def validate(data):
     if settings['provider'] not in ['offline','valhalla']: raise ValueError('Unknown routing provider.')
     settings.setdefault('mode','geographic')
     if settings['mode'] not in ['geographic','efficiency']: raise ValueError('Unknown optimization mode.')
+    settings.setdefault('max_route_minutes',480)
+    number(settings['max_route_minutes'],'Maximum route duration',15,1440)
     number(settings['time_factor'],'Simulated travel-time factor',1,3)
     number(settings['max_trucks'],'Maximum active trucks',1,len(trucks))
     if int(settings['max_trucks']) != settings['max_trucks']: raise ValueError('Maximum trucks must be a whole number.')
@@ -53,6 +55,39 @@ def validate(data):
             if stop not in {d['id'] for d in deliveries} or stop in seen: raise ValueError('Unknown or duplicate delivery assignment.')
             seen.add(stop)
     return data
+
+
+def load_summary(data, assignments=None):
+    """Capacity arithmetic only: the load floor does not prove route feasibility."""
+    assignments = data.get('assignments',{}) if assignments is None else assignments
+    demand = {d['id']:int(d['pallets']) for d in data['deliveries']}
+    total = sum(demand.values())
+    capacities = sorted((int(t['capacity']) for t in data['trucks'] if t['available']),reverse=True)
+    permitted = capacities[:int(data['settings']['max_trucks'])]
+    covered, before, minimum = 0, 0, None
+    for count,capacity in enumerate(capacities,1):
+        before,covered = covered,covered+capacity
+        if covered >= total:
+            minimum = count
+            break
+    used = [t for t in data['trucks'] if assignments.get(t['id'])]
+    loads = [(int(t['capacity']),sum(demand[id] for id in assignments[t['id']])) for t in used]
+    assigned = sum(load for _,load in loads)
+    return dict(unit='pallets',demand=total,assigned=assigned,unassigned=total-assigned,
+        available_trucks=len(capacities),available_capacity=sum(capacities),
+        permitted_trucks=len(permitted),permitted_capacity=sum(permitted),
+        capacity_shortfall=max(0,total-sum(permitted)),
+        used_trucks=len(used),used_capacity=sum(capacity for capacity,_ in loads),
+        free_on_used=sum(max(0,capacity-load) for capacity,load in loads),
+        overload_on_used=sum(max(0,load-capacity) for capacity,load in loads),
+        unavailable_used_trucks=sum(not t['available'] for t in used),
+        min_trucks_by_load=minimum,capacity_before_min=before if minimum else None,
+        capacity_at_min=covered if minimum else None)
+
+
+def route_deadline(data, truck):
+    start = round(truck['shift_start']*60)
+    return min(round(truck['shift_end']*60),start+round(data['settings']['max_route_minutes']*60))
 
 
 def nearby_pairs(deliveries):
@@ -113,7 +148,7 @@ def optimize(data, seconds):
         time.CumulVar(idx).SetRange(round(d['window_start']*60),round(d['window_end']*60))
         routing.AddDisjunction([idx],drop_cost)
     for v,t in enumerate(trucks):
-        start,end = round(t['shift_start']*60),round(t['shift_end']*60)
+        start,end = round(t['shift_start']*60),route_deadline(data,t)
         time.CumulVar(routing.Start(v)).SetRange(start,start)
         time.CumulVar(routing.End(v)).SetRange(start,end)
         routing.AddVariableMinimizedByFinalizer(time.CumulVar(routing.End(v)))
@@ -144,27 +179,37 @@ def plan(data, do_optimize=False, travel=None):
     for truck in data['trucks']:
         ids = assignments.get(truck['id'],[])
         if not ids: continue
-        current,previous,distance,driving,load = truck['shift_start']*60,0,0,0,0
+        start = round(truck['shift_start']*60)
+        current,previous,distance,driving,load = start,0,0,0,0
+        service,waiting = 0,0
         stops,route_warnings,path = [],[],[points[0]]
         if not truck['available']: route_warnings.append('Truck is unavailable.')
         for id in ids:
             index,d = by_id[id]
             travel = seconds[previous][index]
             arrival = current+travel
-            begin = max(arrival,d['window_start']*60)
-            late = max(0,begin-d['window_end']*60)
+            begin = max(arrival,round(d['window_start']*60))
+            late = max(0,begin-round(d['window_end']*60))
             if late: route_warnings.append(f'{id}: service begins {math.ceil(late/60)} min after receiving window.')
-            current = begin+d['service_minutes']*60
+            service_seconds = round(d['service_minutes']*60)
+            waiting+=begin-arrival; service+=service_seconds
+            current = begin+service_seconds
             stops.append(dict(id=id,arrival=round(arrival/60),service_start=round(begin/60),
                 departure=round(current/60),wait_minutes=round((begin-arrival)/60),late_minutes=math.ceil(late/60)))
             driving+=travel; distance+=km[previous][index]; load+=d['pallets']
             previous=index; assigned.add(id); path.append(d)
         driving+=seconds[previous][0]; distance+=km[previous][0]; current+=seconds[previous][0]
         if load>truck['capacity']: route_warnings.append(f'Capacity exceeded: {load}/{truck["capacity"]} pallets.')
-        if current>truck['shift_end']*60: route_warnings.append('Return is after the driver shift ends.')
+        if current>round(truck['shift_end']*60): route_warnings.append('Return is after the driver shift ends.')
+        if current-start>round(data['settings']['max_route_minutes']*60):
+            route_warnings.append(f'Route exceeds the {data["settings"]["max_route_minutes"]:g}-minute duration limit, including service, waiting and return.')
+        deadline = route_deadline(data,truck)
         path.append(points[0])
         routes.append(dict(truck_id=truck['id'],stops=stops,km=round(distance,2),
             drive_minutes=round(driving/60),end=math.ceil(current/60),pallets=load,
+            timing=dict(driving_seconds=driving,service_seconds=service,waiting_seconds=waiting,
+                total_seconds=current-start,limit_seconds=deadline-start,
+                remaining_seconds=deadline-current,within_limit=current<=deadline),
             warnings=route_warnings,geometry=geometry(path,data['settings']['provider'])))
     if len(routes)>data['settings']['max_trucks']: warnings.append('Plan exceeds the maximum active trucks setting.')
     unassigned = [d['id'] for d in data['deliveries'] if d['id'] not in assigned]
@@ -173,7 +218,10 @@ def plan(data, do_optimize=False, travel=None):
     pairs = [(data['deliveries'][a]['id'],data['deliveries'][b]['id']) for a,b,_ in nearby_pairs(data['deliveries'])]
     served_pairs = [(a,b) for a,b in pairs if a in owners and b in owners]
     return dict(mode=data['settings']['mode'],assignments=assignments,routes=routes,unassigned=unassigned,warnings=warnings,
+        load=load_summary(data,assignments),max_route_minutes=data['settings']['max_route_minutes'],
         metrics=dict(km=round(sum(r['km'] for r in routes),2),drive_minutes=sum(r['drive_minutes'] for r in routes),
+            longest_route_minutes=round(max((r['timing']['total_seconds'] for r in routes),default=0)/60,2),
+            over_time_routes=sum(not r['timing']['within_limit'] for r in routes),
             trucks=len(routes),assigned=len(assigned),nearby_pairs=len(served_pairs),
             nearby_pairs_split=sum(owners[a]!=owners[b] for a,b in served_pairs)),
         provider=data['settings']['provider'],time_factor=data['settings']['time_factor'],

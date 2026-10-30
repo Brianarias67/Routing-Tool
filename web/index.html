@@ -16,18 +16,30 @@
       <label>Optimization mode<select id="mode"><option value="geographic">Geographic grouping (default)</option><option value="efficiency">Driving efficiency</option></select></label>
       <label>Travel model<select id="provider"><option value="offline">Offline simulation</option><option value="valhalla">Valhalla road routing</option></select></label>
       <label>Maximum active trucks<input id="max-trucks" type="number" min="1" max="12" value="8"></label>
+      <label>Maximum route hours<input id="max-route-hours" type="number" min="0.25" max="24" step="0.25" value="8"></label>
       <label>Simulated time factor<select id="factor"><option value="1">1.0× · base estimate</option><option value="1.3">1.3× · simulated delay</option><option value="1.6">1.6× · simulated delay</option><option value="2">2.0× · simulated delay</option></select></label>
       <div class="control-note">One depot · return trips included<br><strong>No historical or live traffic feed</strong></div>
       <button id="compare-modes">Compare both modes</button>
       <button id="calculate">Calculate manual plan</button>
     </section>
     <div id="notice" role="status"></div>
+    <section class="load-panel" aria-labelledby="load-heading">
+      <div class="panel-title"><h2 id="load-heading">Load &amp; capacity</h2><span id="load-state">Current assignments</span></div>
+      <div class="load-grid">
+        <article><span class="load-label">Delivery demand</span><strong id="load-demand">—</strong><p id="load-assigned">Loading demand…</p></article>
+        <article><span class="load-label">Available fleet capacity</span><strong id="load-fleet">—</strong><p id="load-fleet-detail">Available trucks only</p></article>
+        <article><span class="load-label">Load / space on used trucks</span><strong id="load-used">—</strong><progress id="load-fill" max="100" value="0" aria-label="Used truck capacity filled"></progress><p id="load-used-detail">Calculate a plan</p></article>
+        <article><span class="load-label">Minimum trucks by load alone</span><strong id="load-floor">—</strong><p id="load-floor-detail">Capacity is a ceiling, not a target.</p></article>
+      </div>
+      <p id="load-explanation" class="load-explanation" aria-live="polite"></p>
+      <div class="time-overview"><div><span class="load-label">Longest full route</span><strong id="longest-route">Not calculated</strong><span id="route-time-status"></span></div><p>Driving + customer service + waiting + return to depot. Each route must fit the maximum route hours and its truck’s shift. Loading and breaks are not yet modeled.</p></div>
+    </section>
     <section class="metrics" aria-label="Plan totals"><div><span>Assigned deliveries</span><strong id="assigned">—</strong></div><div><span>Trucks used / available</span><strong id="used">—</strong></div><div><span id="distance-label">Estimated distance</span><strong id="distance">—</strong></div><div><span>Total driving time</span><strong id="duration">—</strong></div><div class="comparison"><span>Compared with manual plan</span><strong id="comparison">Calculate a baseline</strong></div></section>
     <section class="mode-comparison" aria-label="Optimization comparison"><h2>Fewer trucks first</h2><p>Both modes prioritize serving deliveries, then fewer trucks. Geographic grouping also favors keeping nearby stops together. Compare both to review the tradeoff.</p><div id="mode-results"></div></section>
     <section class="workspace">
       <aside class="fleet-panel"><div class="panel-title"><h2>Fleet</h2><span id="fleet-count">12 trucks</span></div><p class="panel-hint">Select a truck to edit its route.</p><div id="fleet"></div></aside>
       <div class="map-panel"><div class="map-toolbar"><span id="map-title">Santo Domingo</span><button id="fit">Fit routes</button></div><div id="map" aria-label="Delivery route map"></div><div class="map-legend"><span class="line-key"></span><span id="geometry-label">Dashed connectors are simulated, not roads</span></div></div>
-      <aside class="route-panel"><div class="panel-title"><h2 id="route-title">Truck 01</h2><span id="route-load"></span></div><div class="truck-settings"><label><input id="available" type="checkbox"> Available</label><label>Pallet capacity<input id="capacity" type="number" min="1" max="1000"></label></div><div id="route-summary"></div><div id="stops"></div><div class="approval"><button id="approve">Approve reviewed plan</button><p id="approval-note">Approval is saved in this browser only.</p></div></aside>
+      <aside class="route-panel"><div class="panel-title"><h2 id="route-title">Truck 01</h2><span id="route-load"></span></div><div class="truck-settings"><label><input id="available" type="checkbox"> Available</label><label>Pallet capacity<input id="capacity" type="number" min="1" max="1000"></label><label>Shift starts<input id="shift-start" type="time" required></label><label>Shift ends<input id="shift-end" type="text" inputmode="numeric" pattern="([01][0-9]|2[0-3]):[0-5][0-9]|24:00" maxlength="5" title="HH:MM; use 24:00 for midnight" required></label></div><div id="route-summary"></div><div id="stops"></div><div class="approval"><button id="approve">Approve reviewed plan</button><p id="approval-note">Approval is saved in this browser only.</p></div></aside>
     </section>
     <section class="deliveries"><div class="panel-title"><div><h2>Delivery board</h2><p>Assign a truck below. Use the route panel to change stop order.</p></div><label class="search-label">Find delivery<input type="search" id="search" placeholder="ID, name, or neighborhood"></label></div><div class="table-scroll"><table><thead><tr><th>Delivery</th><th>Receiving window</th><th>Pallets</th><th>Service</th><th>Assignment</th><th>Details</th></tr></thead><tbody id="delivery-rows"></tbody></table></div></section>
     <footer>Fictional delivery data and approximate locations. Verify truck entrances before operational use. <span>Karaka routing lab · v0.1</span></footer>

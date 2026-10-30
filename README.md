@@ -25,6 +25,16 @@ The sample contains 12 trucks, 40 fictional deliveries around Santo Domingo, and
 5. Try making trucks unavailable, lowering capacity, or narrowing receiving windows.
 6. Resolve warnings/unassigned deliveries, approve locally, and export JSON to share.
 
+The **Load & capacity** panel shows total pallet demand, assigned/unassigned pallets, all available fleet space, capacity within the active-truck limit, and load/empty space on the trucks used. Its load-only minimum uses the largest available trucks first, so mixed truck sizes are supported. It is a lower bound, not a bin-packing or route-feasibility proof. Per-truck overloads are reported separately; spare space elsewhere does not cancel them. Draft load arithmetic refreshes without requesting road routes.
+
+For the sample: 80 pallets, 144 spaces across 12 available trucks, and up to 96 spaces under the eight-truck cap. Six 12-pallet trucks hold only 72 pallets; seven hold 84. A seven-truck plan carrying all 80 pallets leaves four empty spaces. Capacity is a ceiling, not a target load per truck.
+
+The **Maximum route hours** control defaults to **8 hours**, including for legacy imports that omit the new setting. Each truck's shift start/end can also be edited. Full route duration includes driving, customer service, waiting for receiving windows, and return to the depot. The earlier of the shift end and the route-duration limit applies. The top panel shows the longest full route; each truck shows its own duration, breakdown, limit and remaining time. Route duration is distinct from the sum of driving time across the fleet. Depot loading and driver breaks are not modeled yet.
+
+If fewer trucks cannot serve all deliveries within these limits, the solver can use additional available trucks up to the fleet cap. If the cap or other constraints prevent a feasible full plan, deliveries remain explicitly unassigned; the solver does not silently schedule overtime. Search is time-limited, so extra trucks or unassigned stops do not prove that a better plan is impossible.
+
+Loads currently use **whole pallets**, consistently for orders and truck capacity. Raw box counts cannot be compared directly with pallet spaces. A box-based extension needs a consistent capacity unit or an ERP conversion using actual packaging/space requirements; there is no automatic box-to-pallet conversion in this demo.
+
 ## Two explicit travel modes
 
 **Offline simulation** is immediately runnable. It uses straight-line distances at an assumed 25 km/h and draws dashed connectors. It does not use streets, truck restrictions, historical traffic or live traffic. The optional travel-time multiplier is a uniform simulation, not historical traffic and not a time-of-day model.
@@ -68,7 +78,7 @@ OR-Tools assigns deliveries and chooses their order using the selected provider'
 - Available trucks only; at most the configured number of active trucks.
 - Integer pallet demand and vehicle capacity; deliveries cannot be split.
 - Receiving windows constrain **service start**, not completion. Waiting is allowed.
-- Service duration at every delivery, fixed shift departure, return before shift end.
+- Service duration at every delivery, fixed shift departure, return before shift end and within the configured maximum route duration.
 - One depot; one route per truck; all routes return to the depot.
 
 Both optimization modes prioritize serving the greatest number of deliveries, then using fewer trucks, then their secondary objective. Penalties are bounded from the input matrix to make an additional served stop outweigh all truck/travel/grouping costs, and one fewer truck outweigh all secondary costs.
@@ -91,13 +101,16 @@ Manual plans are evaluated with the same matrix and schedule logic. Capacity, sh
 | `GET /api/sample` | Fictional input scenario |
 | `GET /api/health` | Service health and whether Valhalla is configured |
 | `POST /api/validate` | Validate a scenario without routing |
+| `POST /api/summary` | Validate and summarize load/capacity without a travel-provider call |
 | `POST /api/plan` | Evaluate manual assignments and return schedules/geometry |
 | `POST /api/compare` | Return `geographic` and `efficiency` plans using the same travel matrix |
 | `POST /api/optimize` | Propose assignments, then return the same plan response |
 
-POST bodies use the structure returned by `/api/sample`. Coordinates are decimal WGS84 latitude/longitude. Times are local minutes after midnight in Santo Domingo, for a single planning day. The depot is shared; trucks contain `id`, `name`, `capacity`, `available`, `shift_start`, and `shift_end`. Deliveries contain `id`, `name`, `lat`, `lon`, `pallets`, `service_minutes`, `window_start`, and `window_end`. `assignments` maps truck IDs to ordered delivery-ID arrays. `settings` includes `mode` (`geographic`, the default for new and legacy scenarios, or `efficiency`), `provider` (`offline` or `valhalla`), `max_trucks`, and `time_factor` (1–3).
+POST bodies use the structure returned by `/api/sample`. Coordinates are decimal WGS84 latitude/longitude. Times are local minutes after midnight in Santo Domingo, for a single planning day. The depot is shared; trucks contain `id`, `name`, `capacity`, `available`, `shift_start`, and `shift_end`. Deliveries contain `id`, `name`, `lat`, `lon`, `pallets`, `service_minutes`, `window_start`, and `window_end`. `assignments` maps truck IDs to ordered delivery-ID arrays. `settings` includes `mode` (`geographic`, the default for new and legacy scenarios, or `efficiency`), `provider` (`offline` or `valhalla`), `max_trucks`, `max_route_minutes` (15–1440, defaults to 480), and `time_factor` (1–3). Shifts must end the same day; an end of 1440 is displayed/editable as 24:00.
 
 Responses contain assignments, per-truck stops and schedules, geometry in **[latitude, longitude]** order (not GeoJSON order), totals, warnings, unassigned IDs, and provider provenance. All routes include the depot return leg. Valhalla geometry and pairwise matrix estimates may differ slightly due to waypoint handling; this prototype schedules from the matrix.
+
+Plan responses also contain `load` (the same capacity summary as `/api/summary`) and a `timing` object per route: `driving_seconds`, `service_seconds`, `waiting_seconds`, `total_seconds`, `limit_seconds`, `remaining_seconds`, and `within_limit`. Totals include `longest_route_minutes` and `over_time_routes`. The API retains seconds for accounting; UI durations round up to minutes and available time rounds down. Capacity summaries may reflect invalid manual assignments; check warnings, overloads and unavailable used trucks before approval.
 
 Suggested ERP integration: translate existing orders into this input schema; have the dispatcher review the proposal; then persist approved assignments in the existing app using stable IDs and revision checks. Browser approval in this demo **does not send assignments to drivers or write to an ERP**.
 
