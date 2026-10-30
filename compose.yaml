@@ -6,7 +6,8 @@ services:
     environment:
       VALHALLA_URL: http://valhalla:8002
   valhalla:
-    image: ghcr.io/valhalla/valhalla-scripted:latest
+    # Valhalla 3.9.1-f22153579, verified against the full sample on 2026-10-30.
+    image: ghcr.io/valhalla/valhalla-scripted@sha256:f0556eec9720432337024ef3f29a9cb1ccd752f47ac057c58d3122209989d8da
     ports:
       - "127.0.0.1:8002:8002"
     volumes:

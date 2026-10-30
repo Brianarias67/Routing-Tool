@@ -41,7 +41,9 @@ docker compose up --build
 
 The Valhalla service downloads the **Haiti and Dominican Republic** OpenStreetMap extract from Geofabrik and builds routing tiles into a persistent volume. Initial preparation takes time; wait for its logs to report a running service. The web app can start before the routing service is ready. Open http://127.0.0.1:8080 and select **Valhalla road routing**, then calculate or optimize.
 
-The Compose file follows the [official Valhalla scripted-container instructions](https://github.com/valhalla/valhalla/blob/master/docker/README.md). It uses a moving `latest` image for this prototype; pin a tested image digest before deploying. Docker startup must be verified on the target machine; the development host may not have Docker.
+The Compose file follows the [official Valhalla scripted-container instructions](https://github.com/valhalla/valhalla/blob/master/docker/README.md). It pins the tested Valhalla 3.9.1 image digest. The complete Docker build, regional tile import, and 40-delivery road-routing/optimization workflow were verified on Windows with Docker Desktop on October 30, 2026. See [the verification record](docs/VERIFICATION.md).
+
+After the first build, start the saved containers with `docker compose up -d`. Stop them with `docker compose stop`; the road-data volume remains available. Keep Docker Desktop running while using the demo. The localhost address works on your computer only; coworkers must run their own checkout or use a separately hosted deployment.
 
 If your routing service has matrix limits below 41 locations / 1,681 pairs, raise its truck matrix limits in its generated configuration before running the full sample. This application limits imports to 100 deliveries and 20 trucks; that is not a guarantee that a routing server accepts the same limits.
 

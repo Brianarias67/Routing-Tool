@@ -9,4 +9,17 @@ Checked on October 30, 2026 using Python 3.12 and OR-Tools 9.15.6755 on Windows.
 - Browser smoke check: manual plan loads, map tiles render, optimize updates assignments and totals, unassigning a delivery invalidates the schedule and disables approval.
 - Live Valhalla adapter smoke test: two fictional coordinates `[18.4485,-69.9250]` and `[18.4870,-69.9535]` returned a directed matrix (5.851 km / 1,186 sec outbound; 6.386 km / 1,251 sec return) and a 135-point road polyline. This was a one-off test against the public demo endpoint, not a bundled or production dependency. Those values are not guaranteed to stay unchanged and do not verify the actual Rica entrance or legal truck access.
 
-Not yet verified: local Docker/Valhalla tile build (Docker is not installed on the development host), full 41-location Valhalla deployment, historical traffic, real delivery coordinates, ERP integration, production operation.
+## Docker and complete road-network verification
+
+After Docker Desktop installation on October 30, 2026:
+
+- Docker Engine 29.9.2 / Compose 5.6.1 built and started both services successfully.
+- Valhalla 3.9.1-f22153579 downloaded and built the Geofabrik Haiti and Dominican Republic extract in a persistent named volume.
+- The application reached the local Valhalla `/status` endpoint successfully.
+- The full 41-location matrix (depot plus 40 deliveries) succeeded using the truck profile.
+- The unchanged fictional manual sample produced 248.94 km / 724 driving minutes across eight trucks.
+- A three-second OR-Tools run produced 97.60 km / 291 driving minutes across seven trucks, with all 40 deliveries assigned, no constraint warnings and 2,390 road-geometry points. Results vary with solver runtime and future road-data updates; these sample results are not evidence of actual business savings.
+- The browser successfully calculated the saved scenario in Valhalla road mode.
+- Compose now pins the tested image digest `sha256:f0556eec9720432337024ef3f29a9cb1ccd752f47ac057c58d3122209989d8da`.
+
+Not yet verified: historical traffic, actual customer entrances/legal truck access, ERP integration, production operation.
