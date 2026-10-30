@@ -4,16 +4,18 @@ const colors=['#245bcb','#008678','#b36c24','#8754b5','#c04968','#527c29','#177d
 const esc = x => String(x??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const clock = n => `${String(Math.floor(n/60)).padStart(2,'0')}:${String(Math.round(n%60)).padStart(2,'0')}`;
 const minutes = text => {const [h,m]=text.split(':').map(Number);return h*60+m;};
+let comparisons=null;
 let state, result=null, baseline=null, selected='T01', dirty=true, busy=false, approved=null, map, layers;
 async function api(path,body){const response=await fetch(path,body?{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify(body)}:{});const data=await response.json();if(!response.ok)throw Error(data.error||'Request failed');return data;}
 function notice(message,error=false){$('notice').textContent=message;$('notice').className=error?'error':'';}
 function save(){try{localStorage.setItem('karaka-demo-v1',JSON.stringify({state,approved}));}catch{notice('Browser storage unavailable. Export your plan to save it.',true);}}
-function invalidate(){dirty=true;result=null;approved=null;baseline=null;save();render();notice('Plan changed. Calculate the manual plan or optimize to refresh distances and schedules.');}
+function invalidate(){comparisons=null;dirty=true;result=null;approved=null;baseline=null;save();render();notice('Plan changed. Calculate the manual plan or optimize to refresh distances and schedules.');}
 function owner(id){return Object.keys(state.assignments).find(t=>state.assignments[t].includes(id))||'';}
 function changeAssignment(id,truck){Object.values(state.assignments).forEach(ids=>{const i=ids.indexOf(id);if(i>=0)ids.splice(i,1);});if(truck)(state.assignments[truck]??=[]).push(id);invalidate();}
 function setBusy(value){busy=value;document.body.classList.toggle('busy',value);document.querySelectorAll('button,input,select').forEach(e=>e.disabled=value);if(!value)render();}
 async function calculate(optimize=false){
   if(busy)return;
+  comparisons=null;
   setBusy(true);$('status').textContent=optimize?'Finding a feasible plan…':'Calculating routes…';
   try{
     if(optimize&&!baseline){baseline=await api('/api/plan',state);}
@@ -23,6 +25,24 @@ async function calculate(optimize=false){
     save();
     notice(`${optimize?'Optimization complete. Review before approving.':'Manual plan calculated.'} ${next.unassigned.length} unassigned. ${next.warnings.length} constraint warnings. ${next.warnings.join(' ')} ${next.unassigned.length?'Unassigned: '+next.unassigned.join(', ')+'. ':''}${next.provider==='offline'?'Offline simulation uses straight-line distances at 25 km/h, not street routes.':'Road routes use the configured truck profile; entrance and restriction data still need verification.'}`);
   }catch(error){notice(error.message,true);}finally{setBusy(false);}
+}
+function useMode(mode){
+  state.settings.mode=mode;result=structuredClone(comparisons[mode]);state.assignments=structuredClone(result.assignments);
+  dirty=false;approved=null;save();render();
+  notice(`${mode==='geographic'?'Geographic grouping':'Driving efficiency'} displayed. ${result.unassigned.length} unassigned; ${result.warnings.length} warnings. Review the plan before approval.`);
+}
+async function compareModes(){
+  if(busy)return;setBusy(true);$('status').textContent='Comparing both modes…';
+  try{if(!baseline)baseline=await api('/api/plan',state);comparisons=await api('/api/compare',state);useMode(state.settings.mode);}
+  catch(error){notice(error.message,true);}finally{setBusy(false);}
+}
+function renderModes(){
+  $('mode').value=state.settings.mode;
+  $('mode-results').innerHTML=comparisons?['geographic','efficiency'].map(mode=>{
+    const p=comparisons[mode],m=p.metrics;
+    return `<article class="mode-card ${mode===state.settings.mode?'selected':''}"><h3>${mode==='geographic'?'Geographic grouping':'Driving efficiency'}</h3><p><b>${m.trucks} trucks</b> · ${m.km.toFixed(1)} km · ${m.drive_minutes} min driving</p><p>${m.assigned} assigned · ${p.unassigned.length} unassigned · ${p.warnings.length} warnings</p><p>${m.nearby_pairs_split} / ${m.nearby_pairs} nearby pairs split across trucks</p><button data-mode="${mode}" ${busy?'disabled':''}>${mode===state.settings.mode?'Displayed on map':'View this plan'}</button></article>`;
+  }).join('')+'<p class="mode-footnote">Nearby means within 800 m straight-line distance; only pairs with both deliveries assigned are counted. Three-second search per mode; minimum fleet size is not guaranteed.</p>':'';
+  $('mode-results').querySelectorAll('[data-mode]').forEach(b=>b.onclick=()=>useMode(b.dataset.mode));
 }
 function initMap(){
   if(!window.L){$('map').innerHTML='<p class="empty">Map library could not load. Check your internet connection; planning remains available.</p>';return;}
@@ -71,12 +91,15 @@ function render(){
   $('distance-label').textContent=state.settings.provider==='offline'?'Straight-line distance (simulation)':'Planned road distance';
   $('geometry-label').textContent=dirty?'Calculate a plan to display its route':state.settings.provider==='offline'?'Dashed connectors are simulated, not roads':'Road geometry · no traffic feed';
   $('comparison').textContent=m&&baseline?`${(baseline.metrics.km-m.km).toFixed(1)} km less · ${baseline.metrics.drive_minutes-m.drive_minutes} min less`:'Calculate a baseline';
-  renderFleet();renderRoute();renderDeliveries();drawMap();
+  renderModes();renderFleet();renderRoute();renderDeliveries();drawMap();
+  if(busy)document.querySelectorAll('button,input,select').forEach(e=>e.disabled=true);
 }
 function edit(id){const d=state.deliveries.find(d=>d.id===id),f=$('edit-form');for(const key of ['id','name','lat','lon','pallets','service_minutes'])f.elements[key].value=d[key];for(const key of ['window_start','window_end'])f.elements[key].value=clock(d[key]);$('editor').showModal();}
 $('edit-form').onsubmit=event=>{event.preventDefault();const f=event.target,updated={...state.deliveries.find(d=>d.id===f.elements.id.value)};updated.name=f.elements.name.value;for(const key of ['lat','lon','pallets','service_minutes'])updated[key]=+f.elements[key].value;for(const key of ['window_start','window_end'])updated[key]=minutes(f.elements[key].value);if(updated.window_end<updated.window_start){f.elements.window_end.setCustomValidity('Closing time must follow opening time.');f.reportValidity();f.elements.window_end.setCustomValidity('');return;}Object.assign(state.deliveries.find(d=>d.id===updated.id),updated);$('editor').close();invalidate();};
 $('cancel-edit').onclick=()=>$('editor').close();
 $('calculate').onclick=()=>calculate(false);$('optimize').onclick=()=>calculate(true);
+$('compare-modes').onclick=compareModes;
+$('mode').onchange=e=>{const mode=e.target.value;if(comparisons){useMode(mode);}else{state.settings.mode=mode;invalidate();}};
 $('provider').onchange=e=>{state.settings.provider=e.target.value;invalidate();};
 $('factor').onchange=e=>{state.settings.time_factor=+e.target.value;invalidate();};
 $('max-trucks').onchange=e=>{state.settings.max_trucks=+e.target.value;invalidate();};

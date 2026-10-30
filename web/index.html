@@ -13,14 +13,17 @@
   <main>
     <section class="heading"><div><p>Santo Domingo operations</p><h1>A clearer plan for the road.</h1><span>Assign the work. Review the sequence. Dispatch with context.</span></div><div class="heading-actions"><span id="status" role="status">Loading sample…</span><button class="primary" id="optimize">Optimize fleet</button></div></section>
     <section class="controls" aria-label="Planning settings">
+      <label>Optimization mode<select id="mode"><option value="geographic">Geographic grouping (default)</option><option value="efficiency">Driving efficiency</option></select></label>
       <label>Travel model<select id="provider"><option value="offline">Offline simulation</option><option value="valhalla">Valhalla road routing</option></select></label>
       <label>Maximum active trucks<input id="max-trucks" type="number" min="1" max="12" value="8"></label>
       <label>Simulated time factor<select id="factor"><option value="1">1.0× · base estimate</option><option value="1.3">1.3× · simulated delay</option><option value="1.6">1.6× · simulated delay</option><option value="2">2.0× · simulated delay</option></select></label>
       <div class="control-note">One depot · return trips included<br><strong>No historical or live traffic feed</strong></div>
+      <button id="compare-modes">Compare both modes</button>
       <button id="calculate">Calculate manual plan</button>
     </section>
     <div id="notice" role="status"></div>
     <section class="metrics" aria-label="Plan totals"><div><span>Assigned deliveries</span><strong id="assigned">—</strong></div><div><span>Trucks used / available</span><strong id="used">—</strong></div><div><span id="distance-label">Estimated distance</span><strong id="distance">—</strong></div><div><span>Total driving time</span><strong id="duration">—</strong></div><div class="comparison"><span>Compared with manual plan</span><strong id="comparison">Calculate a baseline</strong></div></section>
+    <section class="mode-comparison" aria-label="Optimization comparison"><h2>Fewer trucks first</h2><p>Both modes prioritize serving deliveries, then fewer trucks. Geographic grouping also favors keeping nearby stops together. Compare both to review the tradeoff.</p><div id="mode-results"></div></section>
     <section class="workspace">
       <aside class="fleet-panel"><div class="panel-title"><h2>Fleet</h2><span id="fleet-count">12 trucks</span></div><p class="panel-hint">Select a truck to edit its route.</p><div id="fleet"></div></aside>
       <div class="map-panel"><div class="map-toolbar"><span id="map-title">Santo Domingo</span><button id="fit">Fit routes</button></div><div id="map" aria-label="Delivery route map"></div><div class="map-legend"><span class="line-key"></span><span id="geometry-label">Dashed connectors are simulated, not roads</span></div></div>

@@ -23,4 +23,4 @@ def scenario():
         trucks=[dict(id=f'T{i+1:02}', name=f'Truck {i+1:02}', capacity=12, available=True,
             shift_start=480, shift_end=1020) for i in range(12)],
         assignments={f'T{i+1:02}':[deliveries[i+j*8]['id'] for j in range(5)] for i in range(8)},
-        settings=dict(provider='offline', max_trucks=8, time_factor=1.0))
+        settings=dict(mode='geographic', provider='offline', max_trucks=8, time_factor=1.0))

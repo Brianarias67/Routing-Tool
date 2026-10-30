@@ -23,3 +23,10 @@ After Docker Desktop installation on October 30, 2026:
 - Compose now pins the tested image digest `sha256:f0556eec9720432337024ef3f29a9cb1ccd752f47ac057c58d3122209989d8da`.
 
 Not yet verified: historical traffic, actual customer entrances/legal truck access, ERP integration, production operation.
+
+
+## Optimization mode comparison (October 30, 2026)
+
+Added default geographic grouping and driving efficiency, both prioritizing deliveries served and fewer active trucks. All 12 unit tests pass, including a controlled proximity/travel tradeoff, shared-matrix comparison, legacy defaults, input preservation and capacity-limited fleet size. JavaScript syntax validation passes. Docker app rebuilt against the existing regional Valhalla service. Browser comparison and switching between plans verified.
+
+One road-routing sample run served all 40 stops with seven trucks in both modes and no warnings. Geographic grouping: 107.8 km, 316 driving minutes, 26 of 101 nearby assigned pairs split. Efficiency: 97.8 km, 291 driving minutes, 33 of 101 pairs split. Search is time-limited, so results can vary between runs. Nearby is within 800 m straight-line distance. These are fictional sample results, not measured operational savings.

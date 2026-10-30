@@ -4,7 +4,7 @@ from http.server import ThreadingHTTPServer, SimpleHTTPRequestHandler
 from pathlib import Path
 from urllib.parse import urlparse
 from .sample import scenario
-from .planner import plan, validate
+from .planner import plan, validate, compare
 
 ROOT = Path(__file__).resolve().parent.parent/'web'
 
@@ -23,7 +23,7 @@ class Handler(SimpleHTTPRequestHandler):
         if path=='/api/health': return self.send_json(dict(ok=True,valhalla_configured=bool(os.getenv('VALHALLA_URL'))))
         super().do_GET()
     def do_POST(self):
-        if self.path not in ['/api/plan','/api/optimize','/api/validate']:
+        if self.path not in ['/api/plan','/api/optimize','/api/validate','/api/compare']:
             return self.send_json({'error':'Not found'},404)
         try:
             # Same-origin local demo. Do not expose this server as a production service.
@@ -32,7 +32,7 @@ class Handler(SimpleHTTPRequestHandler):
             length=int(self.headers.get('Content-Length',0))
             if not 0<length<=500000: raise ValueError('Request must be between 1 byte and 500 KB.')
             data=json.loads(self.rfile.read(length))
-            result=validate(data) if self.path=='/api/validate' else plan(data,self.path=='/api/optimize')
+            result=compare(data) if self.path=='/api/compare' else validate(data) if self.path=='/api/validate' else plan(data,self.path=='/api/optimize')
             self.send_json(result)
         except (ValueError,KeyError,TypeError,OverflowError) as error:
             self.send_json({'error':str(error)},400)

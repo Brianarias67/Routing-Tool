@@ -1,5 +1,6 @@
 """Single-depot, delivery-only VRP: pallets, windows, shifts, optional dropped stops."""
 import math
+from copy import deepcopy
 from .routing import matrix, geometry
 
 
@@ -38,6 +39,8 @@ def validate(data):
     settings = data['settings']
     if not isinstance(settings,dict): raise ValueError('Settings must be an object.')
     if settings['provider'] not in ['offline','valhalla']: raise ValueError('Unknown routing provider.')
+    settings.setdefault('mode','geographic')
+    if settings['mode'] not in ['geographic','efficiency']: raise ValueError('Unknown optimization mode.')
     number(settings['time_factor'],'Simulated travel-time factor',1,3)
     number(settings['max_trucks'],'Maximum active trucks',1,len(trucks))
     if int(settings['max_trucks']) != settings['max_trucks']: raise ValueError('Maximum trucks must be a whole number.')
@@ -50,6 +53,31 @@ def validate(data):
             if stop not in {d['id'] for d in deliveries} or stop in seen: raise ValueError('Unknown or duplicate delivery assignment.')
             seen.add(stop)
     return data
+
+
+def nearby_pairs(deliveries):
+    """Soft proximity preference; no dependence on customer names or sample districts."""
+    pairs = []
+    for i,a in enumerate(deliveries):
+        for j in range(i+1,len(deliveries)):
+            b = deliveries[j]
+            lat1,lat2 = math.radians(a['lat']),math.radians(b['lat'])
+            h = math.sin((lat2-lat1)/2)**2 + math.cos(lat1)*math.cos(lat2)*math.sin(math.radians(b['lon']-a['lon'])/2)**2
+            km = 6371*2*math.asin(math.sqrt(min(1,h)))
+            if km < .8:
+                pairs.append((i,j,max(1,round(900*(1-km/.8)))))
+    return pairs
+
+
+def compare(data):
+    data = validate(deepcopy(data))
+    travel = matrix([data['depot']]+data['deliveries'],data['settings']['provider'],data['settings']['time_factor'])
+    results = {}
+    for mode in ['geographic','efficiency']:
+        candidate = deepcopy(data)
+        candidate['settings']['mode'] = mode
+        results[mode] = plan(candidate,True,travel)
+    return results
 
 
 def optimize(data, seconds):
@@ -65,7 +93,15 @@ def optimize(data, seconds):
         return seconds[x][y]+services[x]
     callback = routing.RegisterTransitCallback(transit)
     routing.SetArcCostEvaluatorOfAllVehicles(callback)
-    routing.SetFixedCostOfAllVehicles(1800)
+    pairs = nearby_pairs(deliveries) if data['settings'].get('mode','geographic') == 'geographic' else []
+    # Lexicographic objective encoded with safe bounds: serve stops, use fewer
+    # trucks, then improve travel/cohesion. Search is still time-limited.
+    secondary_bound = max(max(row) for row in seconds)*(len(deliveries)+len(trucks)) + sum(services) + sum(cost for _,_,cost in pairs)
+    vehicle_cost = secondary_bound+1
+    drop_cost = vehicle_cost*len(trucks)+secondary_bound+1
+    routing.SetFixedCostOfAllVehicles(vehicle_cost)
+    for a,b,cost in pairs:
+        routing.AddSoftSameVehicleConstraint([manager.NodeToIndex(a+1),manager.NodeToIndex(b+1)],cost)
     routing.SetMaximumNumberOfActiveVehicles(int(data['settings']['max_trucks']))
     demand = [0]+[int(d['pallets']) for d in deliveries]
     cap = routing.RegisterUnaryTransitCallback(lambda i:demand[manager.IndexToNode(i)])
@@ -75,7 +111,7 @@ def optimize(data, seconds):
     for i,d in enumerate(deliveries,1):
         idx = manager.NodeToIndex(i)
         time.CumulVar(idx).SetRange(round(d['window_start']*60),round(d['window_end']*60))
-        routing.AddDisjunction([idx],10000000)
+        routing.AddDisjunction([idx],drop_cost)
     for v,t in enumerate(trucks):
         start,end = round(t['shift_start']*60),round(t['shift_end']*60)
         time.CumulVar(routing.Start(v)).SetRange(start,start)
@@ -98,10 +134,10 @@ def optimize(data, seconds):
     return assignments
 
 
-def plan(data, do_optimize=False):
+def plan(data, do_optimize=False, travel=None):
     validate(data)
     points = [data['depot']]+data['deliveries']
-    seconds,km = matrix(points,data['settings']['provider'],data['settings']['time_factor'])
+    seconds,km = travel if travel is not None else matrix(points,data['settings']['provider'],data['settings']['time_factor'])
     assignments = optimize(data,seconds) if do_optimize else data.get('assignments',{})
     by_id = {d['id']:(i+1,d) for i,d in enumerate(data['deliveries'])}
     routes, assigned, warnings = [],set(),[]
@@ -133,9 +169,13 @@ def plan(data, do_optimize=False):
     if len(routes)>data['settings']['max_trucks']: warnings.append('Plan exceeds the maximum active trucks setting.')
     unassigned = [d['id'] for d in data['deliveries'] if d['id'] not in assigned]
     warnings.extend(f'{r["truck_id"]}: {w}' for r in routes for w in r['warnings'])
-    return dict(assignments=assignments,routes=routes,unassigned=unassigned,warnings=warnings,
+    owners = {id:truck for truck,ids in assignments.items() for id in ids}
+    pairs = [(data['deliveries'][a]['id'],data['deliveries'][b]['id']) for a,b,_ in nearby_pairs(data['deliveries'])]
+    served_pairs = [(a,b) for a,b in pairs if a in owners and b in owners]
+    return dict(mode=data['settings']['mode'],assignments=assignments,routes=routes,unassigned=unassigned,warnings=warnings,
         metrics=dict(km=round(sum(r['km'] for r in routes),2),drive_minutes=sum(r['drive_minutes'] for r in routes),
-            trucks=len(routes),assigned=len(assigned)),
+            trucks=len(routes),assigned=len(assigned),nearby_pairs=len(served_pairs),
+            nearby_pairs_split=sum(owners[a]!=owners[b] for a,b in served_pairs)),
         provider=data['settings']['provider'],time_factor=data['settings']['time_factor'],
         traffic='No historical or live traffic feed. Any multiplier is a simulation.',
         unassigned_reason='Not assigned; capacity, shifts, windows, fleet limit or time-limited search may prevent inclusion.')

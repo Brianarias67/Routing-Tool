@@ -71,7 +71,14 @@ OR-Tools assigns deliveries and chooses their order using the selected provider'
 - Service duration at every delivery, fixed shift departure, return before shift end.
 - One depot; one route per truck; all routes return to the depot.
 
-The objective strongly prioritizes serving deliveries, then minimizes travel/service seconds plus a 30-minute-equivalent cost per active truck. Search is limited to three seconds, so a mathematically optimal solution is not guaranteed. Unassigned deliveries are shown explicitly. A generic reason lists possible constraints; the demo does not claim to prove an individual infeasibility cause.
+Both optimization modes prioritize serving the greatest number of deliveries, then using fewer trucks, then their secondary objective. Penalties are bounded from the input matrix to make an additional served stop outweigh all truck/travel/grouping costs, and one fewer truck outweigh all secondary costs.
+
+- **Geographic grouping (default):** travel/service seconds plus a soft penalty for splitting nearby delivery pairs across trucks. Pairs within 800 m straight-line distance receive a penalty of up to 900 equivalent seconds, decreasing linearly with distance. This is a proximity preference, not fixed territories or a guarantee of non-overlapping routes. Roads still determine travel costs and schedules.
+- **Driving efficiency:** travel/service seconds, with no geographic grouping penalty.
+
+Use **Compare both modes** to solve both against the same matrix and constraints, then view either result on the map. Cards show trucks, distance, driving time, unassigned deliveries, warnings, and the number of nearby assigned pairs split across trucks. Fewer splits indicates better local cohesion but does not prove an operationally superior plan. Any scenario edit clears the comparison.
+
+The default sample has 80 pallets and 12-pallet trucks, so at least seven trucks are needed. Grouping preferences do not override capacity, time windows, shifts or the preference for fewer trucks. Search is limited to three seconds, so a mathematically optimal solution is not guaranteed. Unassigned deliveries are shown explicitly. A generic reason lists possible constraints; the demo does not claim to prove an individual infeasibility cause.
 
 The eight-truck setting is a **maximum**, not an exact route count. The solver may choose fewer. Supporting multiple depot reload trips per truck, breaks, different driver/vehicle identities, pickups, locked assignments, or mixed vehicle routing profiles requires additional modeling.
 
@@ -85,9 +92,10 @@ Manual plans are evaluated with the same matrix and schedule logic. Capacity, sh
 | `GET /api/health` | Service health and whether Valhalla is configured |
 | `POST /api/validate` | Validate a scenario without routing |
 | `POST /api/plan` | Evaluate manual assignments and return schedules/geometry |
+| `POST /api/compare` | Return `geographic` and `efficiency` plans using the same travel matrix |
 | `POST /api/optimize` | Propose assignments, then return the same plan response |
 
-POST bodies use the structure returned by `/api/sample`. Coordinates are decimal WGS84 latitude/longitude. Times are local minutes after midnight in Santo Domingo, for a single planning day. The depot is shared; trucks contain `id`, `name`, `capacity`, `available`, `shift_start`, and `shift_end`. Deliveries contain `id`, `name`, `lat`, `lon`, `pallets`, `service_minutes`, `window_start`, and `window_end`. `assignments` maps truck IDs to ordered delivery-ID arrays. `settings` includes `provider` (`offline` or `valhalla`), `max_trucks`, and `time_factor` (1–3).
+POST bodies use the structure returned by `/api/sample`. Coordinates are decimal WGS84 latitude/longitude. Times are local minutes after midnight in Santo Domingo, for a single planning day. The depot is shared; trucks contain `id`, `name`, `capacity`, `available`, `shift_start`, and `shift_end`. Deliveries contain `id`, `name`, `lat`, `lon`, `pallets`, `service_minutes`, `window_start`, and `window_end`. `assignments` maps truck IDs to ordered delivery-ID arrays. `settings` includes `mode` (`geographic`, the default for new and legacy scenarios, or `efficiency`), `provider` (`offline` or `valhalla`), `max_trucks`, and `time_factor` (1–3).
 
 Responses contain assignments, per-truck stops and schedules, geometry in **[latitude, longitude]** order (not GeoJSON order), totals, warnings, unassigned IDs, and provider provenance. All routes include the depot return leg. Valhalla geometry and pairwise matrix estimates may differ slightly due to waypoint handling; this prototype schedules from the matrix.
 
