@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Karaka · Dispatch studio</title>
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css">
+  <link rel="stylesheet" href="/style.css">
+  <script defer src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script defer src="/app.js"></script>
+</head>
+<body>
+  <header><a class="brand" href="/" aria-label="Karaka home"><span class="brand-mark">K</span><b>karaka</b><span class="brand-divider"></span><span>Dispatch studio</span></a><div class="header-right"><span class="demo-tag">Working demo</span><button id="reset">Reset sample</button><button id="import">Import scenario</button><input id="file" type="file" accept=".json" hidden><button id="export">Export plan</button></div></header>
+  <main>
+    <section class="heading"><div><p>Santo Domingo operations</p><h1>A clearer plan for the road.</h1><span>Assign the work. Review the sequence. Dispatch with context.</span></div><div class="heading-actions"><span id="status" role="status">Loading sample…</span><button class="primary" id="optimize">Optimize fleet</button></div></section>
+    <section class="controls" aria-label="Planning settings">
+      <label>Travel model<select id="provider"><option value="offline">Offline simulation</option><option value="valhalla">Valhalla road routing</option></select></label>
+      <label>Maximum active trucks<input id="max-trucks" type="number" min="1" max="12" value="8"></label>
+      <label>Simulated time factor<select id="factor"><option value="1">1.0× · base estimate</option><option value="1.3">1.3× · simulated delay</option><option value="1.6">1.6× · simulated delay</option><option value="2">2.0× · simulated delay</option></select></label>
+      <div class="control-note">One depot · return trips included<br><strong>No historical or live traffic feed</strong></div>
+      <button id="calculate">Calculate manual plan</button>
+    </section>
+    <div id="notice" role="status"></div>
+    <section class="metrics" aria-label="Plan totals"><div><span>Assigned deliveries</span><strong id="assigned">—</strong></div><div><span>Trucks used / available</span><strong id="used">—</strong></div><div><span id="distance-label">Estimated distance</span><strong id="distance">—</strong></div><div><span>Total driving time</span><strong id="duration">—</strong></div><div class="comparison"><span>Compared with manual plan</span><strong id="comparison">Calculate a baseline</strong></div></section>
+    <section class="workspace">
+      <aside class="fleet-panel"><div class="panel-title"><h2>Fleet</h2><span id="fleet-count">12 trucks</span></div><p class="panel-hint">Select a truck to edit its route.</p><div id="fleet"></div></aside>
+      <div class="map-panel"><div class="map-toolbar"><span id="map-title">Santo Domingo</span><button id="fit">Fit routes</button></div><div id="map" aria-label="Delivery route map"></div><div class="map-legend"><span class="line-key"></span><span id="geometry-label">Dashed connectors are simulated, not roads</span></div></div>
+      <aside class="route-panel"><div class="panel-title"><h2 id="route-title">Truck 01</h2><span id="route-load"></span></div><div class="truck-settings"><label><input id="available" type="checkbox"> Available</label><label>Pallet capacity<input id="capacity" type="number" min="1" max="1000"></label></div><div id="route-summary"></div><div id="stops"></div><div class="approval"><button id="approve">Approve reviewed plan</button><p id="approval-note">Approval is saved in this browser only.</p></div></aside>
+    </section>
+    <section class="deliveries"><div class="panel-title"><div><h2>Delivery board</h2><p>Assign a truck below. Use the route panel to change stop order.</p></div><label class="search-label">Find delivery<input type="search" id="search" placeholder="ID, name, or neighborhood"></label></div><div class="table-scroll"><table><thead><tr><th>Delivery</th><th>Receiving window</th><th>Pallets</th><th>Service</th><th>Assignment</th><th>Details</th></tr></thead><tbody id="delivery-rows"></tbody></table></div></section>
+    <footer>Fictional delivery data and approximate locations. Verify truck entrances before operational use. <span>Karaka routing lab · v0.1</span></footer>
+  </main>
+  <dialog id="editor"><form method="dialog" id="edit-form"><h2>Edit delivery</h2><input name="id" type="hidden"><label>Name<input name="name" required maxlength="120"></label><div class="form-grid"><label>Latitude<input name="lat" type="number" step="any" min="-90" max="90" required></label><label>Longitude<input name="lon" type="number" step="any" min="-180" max="180" required></label><label>Pallets<input name="pallets" type="number" min="1" max="1000" required></label><label>Service minutes<input name="service_minutes" type="number" min="0" max="240" required></label><label>Window opens<input name="window_start" type="time" required></label><label>Window closes<input name="window_end" type="time" required></label></div><p>Coordinates must identify a verified entrance for real routing.</p><div class="dialog-actions"><button type="button" id="cancel-edit">Cancel</button><button class="primary" type="submit">Save delivery</button></div></form></dialog>
+</body></html>

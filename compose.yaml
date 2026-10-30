@@ -1,0 +1,21 @@
+services:
+  app:
+    build: .
+    ports:
+      - "127.0.0.1:8080:8080"
+    environment:
+      VALHALLA_URL: http://valhalla:8002
+  valhalla:
+    image: ghcr.io/valhalla/valhalla-scripted:latest
+    ports:
+      - "127.0.0.1:8002:8002"
+    volumes:
+      - valhalla-data:/custom_files
+    environment:
+      tile_urls: https://download.geofabrik.de/central-america/haiti-and-domrep-latest.osm.pbf
+      build_elevation: "False"
+      build_admins: "True"
+      build_time_zones: "True"
+      server_threads: "2"
+volumes:
+  valhalla-data:
